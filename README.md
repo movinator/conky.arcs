@@ -43,6 +43,6 @@ system service (a little helper script)
   - each set of rings has its own config-section
   - script that creates graphics based on configuration is separated,
     so you don't need to change it
-  - please read [Documentation] (Documentation.md) for further details
+  - please read [Documentation](Documentation.md) for further details
 
 
