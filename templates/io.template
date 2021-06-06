@@ -1,0 +1,26 @@
+  io = {
+    x = 34,
+    y = 11,
+    w = 35,
+    h =  9,
+    main = {
+      { x =  1, y = 5, a = 'R', text = 'Disk Reads' },
+      { x = 26, y = 5, a = 'L', text = '${diskio_read}' },
+      { x =  1, y = 6, a = 'R', text = 'Disk Writes' },
+      { x = 26, y = 6, a = 'L', text = '${diskio_write}' },
+    },
+    sub = {
+      { x =  1, y =  7, a = 'R', text = '${top_io name 1}' },
+      { x = 26, y =  7, a = 'L', text = '${top_io io_write 1}' },
+      { x =  1, y =  8, a = 'R', text = '${top_io name 2}' },
+      { x = 26, y =  8, a = 'L', text = '${top_io io_write 2}' },
+      { x =  1, y =  9, a = 'R', text = '${top_io name 3}' },
+      { x = 26, y =  9, a = 'L', text = '${top_io io_write 3}' },
+    },
+    rings = {
+      { x = 26, y = 3, r = 2, h = 0.8, d = 'ccw', name = 'top_io io_perc 1', arg = '', max = 100, sa = 180, ea = 280, ba = 0.5 },
+      { x = 26, y = 3, r = 3, h = 0.8, d = 'ccw', name = 'top_io io_perc 2', arg = '', max = 100, sa = 180, ea = 280, ba = 0.4 },
+      { x = 26, y = 3, r = 4, h = 0.8, d = 'ccw', name = 'top_io io_perc 3', arg = '', max = 100, sa = 180, ea = 280, ba = 0.3 },
+    },
+  },
+

@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2021 movinator (movinator@github.com)
+#
+# project: conky.arcs theme for conky
+# purpose: installation script for conky.arcs theme
+#          Script explores running system and generates matching
+#          gui elements for conky system monitor.
+import os
+import sys
+import glob
+import array
+import logging as log
+import pathlib
+import subprocess
+
+
+def usage():
+    print('conky.arc is a theme for system monitor app "conky"')
+    print('this install-script evaluates your system and generates')
+    print('matching config file.')
+    print('')
+    print('if conky is not located at "/usr/bin/conky", ...')
+    print('please provide the path to conky application as commandline ')
+    print('argument. Install script then checks capability of conky.')
+    print('')
+    exit(0)
+
+
+def conkyCAPsFailed(app):
+    print(f'conky [{app}] is not capable to run conky.arcs theme.')
+    print('conky.arcs needs conky with lua and cairo support.')
+    print('Try to install "conky-all" or use an appimage from ')
+    print('https://github.com/brndnmtthws/conky/releases')
+    print('')
+    exit(-1)
+
+
+class ConfigReader:
+  def __init__(self, conky):
+      hasLua, hasCairo = self.evalConky(conky)
+      if not hasLua or not hasCairo:
+         conkyCAPsFailed(conky)
+      self.app     = conky
+      self.curdir  = os.getcwd()
+      self.homedir = pathlib.Path.home()
+      self.sensors = self.getSensors()
+      self.nCPU    = self.countCPU()
+      self.netIF   = self.networkIF()
+      self.md      = self.mounted_drives()
+      self.hds     = self.harddisks()
+      self.cpuFreqs()
+
+
+  def countCPU(self, maxCPU = 6):
+      cpus = sorted(glob.glob('/sys/devices/system/cpu/cpu?'))
+      return len(cpus)
+
+
+  def cpuFreqs(self):
+      f0 = 10000
+      f1 = 0
+      with open('/sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state') as f:
+           for line in f:
+               parts = line.split(' ')
+               fCPU = int(parts[0]) / 1000
+               f0 = min(f0, fCPU)
+               f1 = max(f1, fCPU)
+      self.fCPU0 = int(f1 * 0.54)
+      self.fCPU1 = int(f1 * 0.81)
+
+
+  def evalConky(self, app):
+      p = pathlib.Path(app)
+      if not p.exists():
+         print('conky NOT found. Please install "conky-all"')
+         print('')
+         exit(0)
+      p = subprocess.Popen([app, '--version'], stdout=subprocess.PIPE)
+      line = p.stdout.readline()
+      hasLua   = False
+      hasCairo = False
+      while line:
+            if line.strip().startswith(b'Lua bind'):
+               hasLua = True
+               line = p.stdout.readline()
+               while line.strip().startswith(b'*'):
+                     parts = line.strip().split(b' ')
+                     if parts[1] == b'Cairo':
+                        hasCairo = True
+                        return [hasLua, hasCairo]
+                     line = p.stdout.readline()
+            line = p.stdout.readline()
+      return [hasLua, hasCairo]
+
+
+  def getSensors(self):
+      sensors = []
+      possiblePaths = [
+        '/sys/class/hwmon/hwmon0/temp0_input',
+        '/sys/class/hwmon/hwmon0/temp1_input',
+        '/sys/class/hwmon/hwmon0/temp2_input',
+        '/sys/class/hwmon/hwmon1/temp0_input',
+        '/sys/class/hwmon/hwmon1/temp1_input',
+        '/sys/class/hwmon/hwmon1/temp2_input',
+        ]
+      try:
+         for e in possiblePaths:
+             p = pathlib.Path(e)
+             if p.exists():
+                log.info('sensor found at {}'.format(p))
+                sensors.append(e)
+      except Exception as e:
+        log.error('failed to find cpu temperature {0}'.format(e))
+      if len(sensors) < 1:
+         t = '/sys/class/thermal/thermal_zone{0}/temp'
+         p = pathlib.Path(t.format('0'))
+         if p.exists():
+            sensors.append(t.format('0'))
+         p = pathlib.Path(t.format('1'))
+         if p.exists():
+            sensors.append(t.format('1'))
+      return sensors
+
+
+  def mounted_drives(self):
+      drives = {}
+      with open('/proc/mounts') as f:
+           for line in f:
+               if not line.startswith('/'):
+                  continue
+               parts = line.split()
+               if parts[0] in drives:
+                  if len(drives[parts[0]]) > len(parts[1]):
+                     drives[parts[0]] = parts[1]
+               else:
+                  drives[parts[0]] = parts[1]
+      return drives
+
+
+  def harddisks(self):
+      disks = sorted(glob.glob('/dev/sd?'))
+      hdds = {}
+      for d in disks:
+          parts = d.split('/')
+          hdds[parts[2]] = d
+      return hdds
+
+
+  def networkIF(self):
+      with open('/proc/net/route') as f:
+           for line in f:
+               ifName = line.split()[0]
+               if ifName == 'Iface':
+                  continue
+               return ifName
+      return ''
+
+
+  def dump(self):
+      print('conky [{0}] found and has lua and cairo support'.format(self.app))
+      print('curdir = ' + self.curdir)
+      print('homedir = ' + str(self.homedir))
+      print('found {0} cpu cores'.format(self.nCPU))
+      print('cpu temperature at {0}'.format(self.sensors[0]))
+      print('cpu levels: {0} \t{1}'.format(self.fCPU0, self.fCPU1))
+      if len(self.sensors) < 2:
+         print('NO temperatures for gpu!')
+      print('network interface is {0}'.format(self.netIF))
+      print('harddisks:')
+      for d in self.hds:
+          print('\tfound disk {0}'.format(d))
+      print('mounted drives:')
+      for d in self.md:
+          print('\t{0} with path {1}'.format(d, self.md[d]))
+
+
+class ConfigWriter:
+  def __init__(self, cfgReader):
+      self.cr = cfgReader
+      self.modIntro = 'local config = {}\n\nfunction config.setup()\n  return {\n'
+      self.modClose = '}\nend\n\nreturn config\n'
+      p = pathlib.Path(str(self.cr.homedir) + '/.config/conky')
+      if not p.exists():
+         os.makedirs(str(self.cr.homedir) + '/.config/conky')
+      self.base = str(self.cr.homedir) + '/.config/conky'
+
+
+  def copyFonts(self):
+      fd = '/usr/share/fonts/truetype/freefonts'
+      subprocess.check_call(['sudo', 'mkdir', '-p', fd])
+      fonts = glob.glob('fonts/*.ttf')
+      for f in fonts:
+          subprocess.check_call(['sudo', 'cp', f, fd])
+
+
+  def createConf(self):
+      with open('./templates/conky.conf') as f:
+           s = f.read()
+      r = s
+      r += 'conky.text = [[\n${voffset 290}\n'
+      s0 = '${goto 640}'
+      gd = '${@@FUNC@@ @@NETIF@@ 50, @@WIDTH@@ ADFF2F 32CD32 -t -l}\n'
+      gu = '${@@FUNC@@ @@NETIF@@ 50, @@WIDTH@@ FF0000 8B0000 -t -l}\n'
+      r += s0 + gd.replace('@@FUNC@@', 'downspeedgraph').replace('@@NETIF@@', self.cr.netIF).replace('@@WIDTH@@', '280')
+      r += s0 + gu.replace('@@FUNC@@', 'upspeedgraph').replace('@@NETIF@@', self.cr.netIF).replace('@@WIDTH@@', '280')
+      s0 = '${goto 215}'
+      r += '${voffset -90}\n'
+      r += s0 + gd.replace('@@FUNC@@', 'diskiograph_read').replace('@@NETIF@@', '').replace('@@WIDTH@@', '340')
+      r += s0 + gu.replace('@@FUNC@@', 'diskiograph_write').replace('@@NETIF@@', '').replace('@@WIDTH@@', '340')
+      return r
+
+
+  def genConkyConfig(self):
+      with open(self.base + '/conky.conf', 'w') as f:
+           f.write(self.createConf())
+           f.write(']]')
+
+
+  def genLuaConfig(self):
+      with open(self.base + '/config.lua', 'w') as f:
+           f.write(self.modIntro)
+           f.write(self.genStatics())
+           f.write(self.genCPU())
+           f.write(self.genIO())
+           f.write(self.genMemory())
+           f.write(self.genDiskSpace())
+           f.write(self.genTemperature())
+           f.write(self.modClose)
+
+
+  def genLuaScript(self):
+      with open('./templates/conky.arcs.template') as f:
+           s = f.read()
+      with open(self.base + '/conky.arcs.lua', 'w') as f:
+           f.write(s)
+      p = pathlib.Path(str(self.cr.homedir) + '/config.lua')
+      if not p.exists():
+         os.symlink(self.base + '/config.lua', str(self.cr.homedir) + '/config.lua')
+
+
+  def genStatics(self):
+      with open('./templates/statics.template') as f:
+           src = f.read()
+      return src.replace('@@IPADDR@@', self.cr.netIF)
+
+
+  def genCPU(self):
+      with open('./templates/cpu0.template') as f:
+           s = f.read()
+      r = s.replace('@@CPU_FREQ1@@', str(self.cr.fCPU0))
+      r = r.replace('@@CPU_FREQ2@@', str(self.cr.fCPU1))
+      with open('./templates/cpu.m0.template') as f:
+           s = f.read()
+      r = r + s
+      with open('./templates/cpu.m1.template') as f:
+          s = f.read()
+      for i in range(self.cr.nCPU):
+          r = r + s.replace('@@INDEX@@', str(i+2)).replace('@@CPU_INDEX@@', str(i+1))
+      with open('./templates/cpu1.template') as f:
+           s = f.read()
+      r = r + s
+      with open('./templates/cpu.r0.template') as f:
+           s0 = f.read()
+      with open('./templates/cpu.r1.template') as f:
+           s1 = f.read()
+      mx = self.cr.nCPU
+      y = mx + 3
+      radius = 8 - mx
+      for i in range(mx, -1, -1):
+          if i == mx:
+             r = r + s0.replace('@@RADIUS@@', str(radius + i)).replace('@@BACK_ALPHA@@', str((3+i) / 10))
+          else:
+             r = r + s1.replace('@@RADIUS@@', str(radius + i)).replace('@@CPU_INDEX@@', str(mx - i)).replace('@@BACK_ALPHA@@', str((3+i) / 10))
+      r = r + '    },\n  },\n\n'
+      return r
+
+
+  def installConky(self):
+      sf = str(self.cr.homedir) + '/.config/autostart/conky.desktop'
+      p = pathlib.Path(sf)
+      if p.exists():
+         return
+      with open(sf, 'w') as f:
+           f.write('[Desktop Entry]\nType=Application\nName=conky\nExec=conky --daemonize --pause=1\n')
+           f.write('StartupNotify=false\nTerminal=false\nIcon=conky-logomark-violet\nCategories=System;Monitor;\n')
+
+
+  def install(self):
+      self.genLuaConfig()
+      self.genConkyConfig()
+      self.genLuaScript()
+      self.copyFonts()
+      self.installTempLogger()
+      self.installConky()
+
+
+  def installTempLogger(self):
+      p = pathlib.Path('/usr/sbin/TempLogger')
+      if p.exists():
+         return
+      subprocess.check_call(['sudo', 'cp', 'misc/TempLogger', '/usr/sbin'])
+      subprocess.check_call(['sudo', 'cp', 'misc/TempLogger.service', '/lib/systemd/system'])
+      subprocess.check_call(['sudo', 'systemctl', 'enable', 'TempLogger.service'])
+      subprocess.check_call(['sudo', 'systemctl', 'start', 'TempLogger.service'])
+
+
+  def genIO(self):
+      with open('./templates/io.template') as f:
+           s = f.read()
+      return s
+
+
+  def genMemory(self):
+      with open('./templates/mem.template') as f:
+           s = f.read()
+      return s.replace('@@IPADDR@@', self.cr.netIF)
+
+
+  def genDiskSpace(self):
+      with open('./templates/hdd0.template') as f:
+           s = f.read()
+      r = s
+      with open('./templates/hdd.m.template') as f:
+           s = f.read()
+      y = len(self.cr.md) * 2 + 1
+      c = 0
+      for d in self.cr.md:
+          r += s.replace('@@MOUNT@@', self.cr.md[d]).replace('@@ROW@@', str(y))
+          y -= 1
+          if ++c > 5:
+             break
+      r += '    },\n    rings = {\n'
+      with open('./templates/hdd.r.template') as f:
+           s = f.read()
+      y -= 2
+      radius = y + 1
+      c = 0
+      for d in self.cr.md:
+          r += s.replace('@@ROW@@', str(y)).replace('@@RADIUS@@', str(radius)).replace('@@MOUNT@@', self.cr.md[d])
+          radius -= 1
+          if ++c > 5:
+             break
+      r = r + '    },\n  },\n\n'
+      return r
+
+
+  def genTemperature(self):
+      with open('./templates/temp0.template') as f:
+           s = f.read()
+      r = s
+      with open('./templates/temp.m0.template') as f:
+           s0 = f.read()
+      y = 2
+      if len(self.cr.sensors) < 2:
+         with open('./templates/temp.m1.template') as f:
+              s1 = f.read()
+         r += s1.replace('@@ROW@@', str(y))
+      else:
+         r += s0.replace('@@ROW@@', str(y)).replace('@@DRIVE@@', 'gpu')
+      for d in self.cr.hds:
+          y += 1
+          r += s0.replace('@@ROW@@', str(y)).replace('@@DRIVE@@', d)
+      with open('./templates/temp1.template') as f:
+           s = f.read()
+      r += s
+      with open('./templates/temp.s0.template') as f:
+           s = f.read()
+      y = 2
+      for d in self.cr.hds:
+          y += 1
+          r += s.replace('@@ROW@@', str(y)).replace('@@DRIVE@@', d)
+      r += '    },\n    rings = {\n'
+      y -= 1
+      with open('./templates/temp.r0.template') as f:
+           s0 = f.read()
+      radius = y+1
+      r += s0.replace('@@ROW@@', str(y)).replace('@@RADIUS@@', str(radius)).replace('@@DRIVE@@', 'cpu')
+      radius -= 1
+      if len(self.cr.sensors) < 2:
+         with open('./templates/temp.r1.template') as f:
+              s1 = f.read()
+         r += s1.replace('@@ROW@@', str(y)).replace('@@RADIUS@@', str(radius))
+      else:
+         r += s0.replace('@@ROW@@', str(y)).replace('@@RADIUS@@', str(radius)).replace('@@DRIVE@@', 'gpu')
+      for d in self.cr.hds:
+          radius -= 1
+          r += s0.replace('@@ROW@@', str(y)).replace('@@RADIUS@@', str(radius)).replace('@@DRIVE@@', d)
+      r += '    },\n  },\n'
+      return r
+
+
+if __name__ == "__main__":
+   conkyapp = '/usr/bin/conky'
+   if len(sys.argv) > 1:
+      if sys.argv[1] == '--help':
+         usage()
+      else:
+         p = pathlib.Path(sys.argv[1])
+         if p.exists():
+            conkyapp = sys.argv[1]
+         else:
+            usage()
+   cw = ConfigWriter(ConfigReader(conkyapp))
+   cw.install()

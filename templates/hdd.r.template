@@ -1,0 +1,1 @@
+      { x = 11, y = @@ROW@@, r = @@RADIUS@@, h = 0.7, d = 'cw', name = 'fs_used_perc', arg = '@@MOUNT@@', max = 100, sa = 180, ea = 455, ba = 0.7 },

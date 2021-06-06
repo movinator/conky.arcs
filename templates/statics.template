@@ -1,0 +1,43 @@
+  x     =  9,
+  y     =  0,
+  fs    = 20,
+  font  = 'Cuprum',
+  hFont = 'Vast Shadow',
+  rCol  = '95275C',
+  rBgC  = '565656',
+  color = 'FFFFFF',
+  col1  = 'F2B70E',
+  col2  = 'E90812',
+  col3  = 'CDCDCD',
+  bgCol = '993636',
+  alpha = 0.9,
+  sb    = false,
+  uptime = {
+  --[[
+      x/y the position where the text should be aligned to
+      a: L means text ends at x/y or is on the left side of position
+      a: R means text starts at x/y or is on the right side of position
+      text starting with '$' will be translated by conky engine
+    ]]--
+    { x = 37, y = 2, a = 'L', s = 30, text = 'Uptime' },
+    { x = 38, y = 2, a = 'R', s = 30, text = '${uptime_short}' },
+  },
+  date = {
+    { x = 27, y = 6, a = 'L', s = 40, text = '${time %A}' },
+    { x = 29, y = 6, a = 'R', s = 40, text = '${time %x}' },
+  },
+  time = {
+    { x = 27, y = 10, a = 'L', s = 80, text = '${time %H}' },
+    { x = 29, y = 10, a = 'R', s = 80, text = ':' },
+    { x = 33, y = 10, a = 'R', s = 80, text = '${time %M}' },
+  },
+  sys = {
+    { x = 37, y =  3, a = 'L', s = 20, text = 'local IP:' },
+    { x = 38, y =  3, a = 'R', s = 20, text = '${addr @@IPADDR@@}' },
+    { x = 37, y =  4, a = 'L', s = 20, text = 'public IP:' },
+    { x = 38, y =  4, a = 'R', s = 20, text = "${execi 3600 wget -q -O - checkip.dyndns.org | sed -e 's/[^[:digit:]\|.]//g'}" },
+    { x =  6, y = 13, a = 'R', s = 30, text = "${execi 3600 awk -F '=' '/PRETTY_NAME/ { print $2 }' /etc/os-release | tr -d '\"'} " },
+    { x = 65, y = 21, a = 'R', s = 25, text = 'network Traffic' },
+    { x = 25, y = 24, a = 'R', s = 25, text = 'disk Traffic' },
+  },
+

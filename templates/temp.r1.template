@@ -1,0 +1,1 @@
+      { x = 15, y = @@ROW@@, r = @@RADIUS@@, h = 0.8, d = 'cw', name = 'nvidia',   arg = 'gputemp',  max = 100, sa = 0, ea = 270, ba = 0.4 },

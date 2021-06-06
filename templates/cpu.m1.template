@@ -1,0 +1,3 @@
+      { x =  0, y =  @@INDEX@@, a = 'R', text = 'CPU @@CPU_INDEX@@' },
+      { x = 10, y =  @@INDEX@@, a = 'L', text = '${freq @@CPU_INDEX@@}' },
+      { x = 15, y =  @@INDEX@@, a = 'L', text = '${cpu cpu@@CPU_INDEX@@}%' },

@@ -1,0 +1,1 @@
+      { x = 15, y = 7, r = @@RADIUS@@, h = 0.9, d = 'cw', name = 'cpu', arg = 'cpu@@CPU_INDEX@@', max = 100, sa = 0, ea = 300, ba = @@BACK_ALPHA@@ },

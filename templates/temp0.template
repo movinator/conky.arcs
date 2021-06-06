@@ -1,0 +1,7 @@
+  temp = {
+    x = 29,
+    y = 27,
+    w = 31,
+    h = 16,
+    main = {
+      { x = 15, y =  1, a = 'L', text = '${exec cat /tmp/temps/cpu}°' },

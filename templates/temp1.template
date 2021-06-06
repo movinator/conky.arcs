@@ -1,0 +1,4 @@
+    },
+    sub = {
+      { x =  5, y =  1, a = 'R', text = 'CPU' },
+      { x =  5, y =  2, a = 'R', text = 'GPU' },

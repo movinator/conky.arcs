@@ -1,0 +1,2 @@
+      { x =  0, y =  1, a = 'R', text = 'CPU' },
+      { x = 15, y =  1, a = 'L', text = '${cpu cpu0}%' },

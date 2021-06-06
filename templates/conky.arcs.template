@@ -1,0 +1,254 @@
+--[[
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2021 movinator (movinator@github.com)
+#
+# project: conky.arcs theme for conky
+# purpose: lua script which processes config.lua file and draws
+#          system monitor with conky provided values
+#          All customizable stuff is placed in config.lua
+#          this file contains code to process that config file and for so
+#          no need to change this script
+]]--
+require 'cairo'
+cfg = require 'config'
+settings = cfg.setup()
+
+
+function drawBackground(ctx, xOff, yOff, cfg)
+  local w = cfg['w'] * settings['lw']
+  local h = cfg['h'] * settings['lh']
+
+  cairo_set_line_width(ctx, 0)
+  cairo_rectangle(ctx, xOff, yOff, w, h)
+  cairo_set_source_rgba(ctx, rgb2r_g_b(settings['bgCol'], 0.5))
+  cairo_fill_preserve(ctx)
+  cairo_stroke(ctx)
+end
+
+
+function drawRing(ctx, xOff, yOff, rd, cfg)
+  local r  = rd['r'] * settings['lh']
+  local cx = xOff + rd['x'] * settings['lw']
+  local cy = yOff + rd['y'] * settings['lh'] + 1.7 * settings['lh']
+  local s  = string.format('${%s %s}', rd['name'], rd['arg'])
+  local sa = deg2rad(rd['sa'])
+  local ea = deg2rad(rd['ea'])
+  local ca = rd['ea'] - rd['sa']
+
+  s = conky_parse(s)
+  local v = tonumber(s)
+
+  if v == nil then v = 0 end
+  if v > 100  then v = 100 end
+  if rd['d'] == 'ccw' then
+     ca = 360 - rd['ea'] + rd['sa']
+  end
+  ca = ca / 100.0 * v
+  if rd['d'] == 'ccw' then
+    cairo_arc_negative(ctx, cx, cy, r, sa, ea)
+  else
+    cairo_arc(ctx, cx, cy, r, sa, ea)
+  end
+  local bg = rd['bg']
+  local ba = rd['ba']
+  local fg = rd['fg']
+
+  if bg == nil then bg = settings['rBgC'] end
+  if ba == nil then ba = settings['alpha'] end
+  if fg == nil then fg = settings['rCol']  end
+  cairo_set_source_rgba(ctx, rgb2r_g_b(bg, ba))
+  cairo_set_line_width(ctx, settings['lh'] * rd['h'])
+  cairo_stroke(ctx)
+
+  if rd['d'] == 'ccw' then
+    cairo_arc_negative(ctx, cx, cy, r, sa, deg2rad(rd['sa'] - ca))
+  else
+    cairo_arc(ctx, cx, cy, r, sa, deg2rad(rd['sa'] + ca))
+  end
+  cairo_set_source_rgba(ctx, rgb2r_g_b(fg, 0.8))
+  cairo_set_line_width(ctx, settings['lh'] * rd['h'])
+  cairo_stroke(ctx)
+end
+
+
+function printMainText(ctx, te, xOff, yOff, td, cfg)
+  local x = xOff + td['x'] * settings['lw']
+  local y = yOff + td['y'] * settings['lh']
+  local c = settings['color']
+  local a = settings['alpha']
+  local fs = td['s']
+
+  if fs == nil then fs = 0 end
+  if td['text']:sub(0,1) == '$' then
+     s = conky_parse(td['text'])
+     if td['text']:sub(3,5) == 'fre' then
+        v = tonumber(s)
+        if v == nil then v = 0 end
+        local l1 = cfg['level1']
+        local l2 = cfg['level2']
+
+        if l1 == nil then l1 = 2000 end
+        if l2 == nil then l2 = 2990 end
+        if v > l2 then     c,a = settings['col2'],1
+        elseif v > l1 then c,a = settings['col1'],1
+        end
+        cairo_select_font_face(ctx
+                             , settings['font']
+                             , CAIRO_FONT_SLANT_NORMAL
+                             , CAIRO_FONT_WEIGHT_BOLD)
+     else
+        if fs > 0 then
+           cairo_set_font_size(ctx, fs)
+        else
+           cairo_select_font_face(ctx
+                                , settings['font']
+                                , CAIRO_FONT_SLANT_NORMAL
+                                , CAIRO_FONT_WEIGHT_NORMAL)
+        end
+     end
+  else
+     if fs > 0 then
+        cairo_set_font_size(ctx, fs)
+     end
+     s = td['text']
+  end
+
+  if td['a'] == 'L' then
+     cairo_text_extents(ctx, s, te)
+     x = x - te.width
+  end
+  cairo_move_to(ctx, x, y)
+  cairo_set_source_rgba(ctx, rgb2r_g_b(c, settings['alpha']))
+  cairo_show_text(ctx, s)
+  cairo_stroke(ctx)
+end
+
+
+function printText(ctx, te, xOff, yOff, td)
+  local x = xOff + td['x'] * settings['lw']
+  local y = yOff + td['y'] * settings['lh']
+
+  if td['text']:sub(0,1) == '$' then
+     s = conky_parse(td['text'])
+  else
+     s = td['text']
+  end
+  if td['a'] == 'L' then
+     cairo_text_extents(ctx, s, te)
+     x = x - te.width
+  end
+  cairo_move_to(ctx, x, y)
+  cairo_show_text(ctx, s)
+  cairo_stroke(ctx)
+end
+
+
+function deg2rad(d)
+  return (d - 90) * math.pi / 180
+end
+
+
+function rgb2r_g_b(col, alpha)
+  local c = tonumber(col, 16)
+
+  return ((c / 0x10000) % 0x100) / 255.
+       , ((c / 0x100)   % 0x100) / 255.
+       ,  (c % 0x100)            / 255.
+       ,  alpha
+end
+
+
+function genStatics(ctx, te)
+  local xOff = settings['x'] * settings['lw']
+  local yOff = settings['y'] * settings['lh']
+  cairo_select_font_face(ctx
+                       , settings['hFont']
+                       , CAIRO_FONT_SLANT_NORMAL
+                       , CAIRO_FONT_WEIGHT_NORMAL)
+  cairo_set_font_size(ctx, 30)
+  cairo_set_source_rgba(ctx, rgb2r_g_b(settings['color'], settings['alpha']))
+
+  for i in pairs(settings['uptime']) do
+      printMainText(ctx, te, xOff, yOff, settings['uptime'][i])
+  end
+  for i in pairs(settings['date']) do
+      printMainText(ctx, te, xOff, yOff, settings['date'][i])
+  end
+  for i in pairs(settings['time']) do
+      printMainText(ctx, te, xOff, yOff, settings['time'][i])
+  end
+  cairo_select_font_face(ctx
+                       , settings['font']
+                       , CAIRO_FONT_SLANT_NORMAL
+                       , CAIRO_FONT_WEIGHT_NORMAL)
+  cairo_set_font_size(ctx, settings['fs'])
+  cairo_set_source_rgba(ctx, rgb2r_g_b(settings['color'], settings['alpha']))
+  for i in pairs(settings['sys']) do
+      printMainText(ctx, te, xOff, yOff, settings['sys'][i])
+  end
+end
+
+
+function genPanel(ctx, te, panelName)
+  local cfg = settings[panelName]
+  local xOff = cfg['x'] * settings['lw']
+  local yOff = cfg['y'] * settings['lh']
+
+  if settings['sb'] then drawBackground(ctx, xOff, yOff, cfg) end
+  for i in pairs(cfg['rings']) do
+      drawRing(ctx, xOff, yOff, cfg['rings'][i], cfg)
+  end
+  for i in pairs(cfg['main']) do
+      printMainText(ctx, te, xOff, yOff, cfg['main'][i], cfg)
+  end
+  local fg = cfg['color']
+
+  if fg == nil then fg = settings['col3'] end
+  cairo_set_source_rgba(ctx, rgb2r_g_b(fg, settings['alpha']))
+  for i in pairs(cfg['sub']) do
+      printText(ctx, te, xOff, yOff, cfg['sub'][i])
+  end
+end
+
+
+function conky_main()
+  if conky_window == nil then return end
+  local cs = cairo_xlib_surface_create(conky_window.display
+                                     , conky_window.drawable
+                                     , conky_window.visual
+                                     , conky_window.width
+                                     , conky_window.height)
+  local ctx = cairo_create(cs)
+  local updates = conky_parse('${updates}')
+
+  nUpdate = tonumber(updates)
+  if nUpdate > 2 then
+     local te = cairo_text_extents_t:create()
+
+     tolua.takeownership(te)
+     cairo_select_font_face(ctx
+                          , settings['font']
+                          , CAIRO_FONT_SLANT_NORMAL
+                          , CAIRO_FONT_WEIGHT_NORMAL)
+     cairo_set_font_size(ctx, settings['fs'])
+     cairo_text_extents(ctx, 'Wy', te)
+     -- calculate position units based on font size
+     settings['lh'] = te.height
+     settings['lw'] = te.width * 0.4
+
+     genStatics(ctx, te)
+     cairo_select_font_face(ctx
+                          , settings['font']
+                          , CAIRO_FONT_SLANT_NORMAL
+                          , CAIRO_FONT_WEIGHT_NORMAL)
+     cairo_set_font_size(ctx, settings['fs'])
+     genPanel(ctx, te, 'cpu')
+     genPanel(ctx, te, 'io')
+     genPanel(ctx, te, 'mem')
+     genPanel(ctx, te, 'temp')
+     genPanel(ctx, te, 'hdd')
+  end
+  cairo_surface_destroy(cs)
+  cairo_destroy(ctx)
+end

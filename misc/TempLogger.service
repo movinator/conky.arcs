@@ -1,0 +1,8 @@
+[unit]
+Description=(smartmontools addon)logs harddisk temperatures to tmp files, which can be read by user processes
+
+[Service]
+ExecStart=/usr/sbin/TempLogger
+
+[Install]
+WantedBy=multi-user.target

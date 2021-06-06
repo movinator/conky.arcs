@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2021 movinator (movinator@github.com)
+#
+# project: conky.arcs theme for conky
+# purpose: provide access to hdd temperature to userspace process
+#          I have several disks where hddtemp does not provide meaningful values,
+#          so have to use smartctl from package "smartmontools", but
+#          smartctl is only usable for user "root", so had to write a system service
+import os
+import glob
+import time
+import logging as log
+import subprocess
+import pathlib
+
+class HDD_Sensor:
+  def __init__(self, name):
+      self.n = name
+      self.p = '/dev/{0}'.format(name)
+      print('HDD_Sensor(name={0}, path={1})'.format(self.n, self.p))
+
+
+  def path(self):
+      return self.p
+
+
+  def name(self):
+      return self.n
+
+
+  def read_temperature(self):
+      rv   = 0.0
+      p    = subprocess.Popen(('/usr/sbin/smartctl', '-A', self.p), stdout=subprocess.PIPE)
+      info = ''
+      try:
+         info  = subprocess.check_output(('/usr/bin/grep', 'Temperature'), stdin=p.stdout)
+         parts = info.split()
+         tmp   = parts[9];
+         rv    = float(tmp)
+      except:
+         pass
+      return rv
+
+
+class TempLogger:
+  def __init__(self):
+      self.hdd = []
+      self.temps = {}
+      p = pathlib.Path('/tmp/temps')
+      if not p.exists():
+         os.mkdir('/tmp/temps')
+      drives = glob.glob('/dev/sd?')
+      for d in drives:
+          tmp = d.split('/')
+          self.hdd.append(HDD_Sensor(tmp[2]))
+      self.sensors = {}
+      possiblePaths = [
+        '/sys/class/hwmon/hwmon0/temp0_input',
+        '/sys/class/hwmon/hwmon0/temp1_input',
+        '/sys/class/hwmon/hwmon0/temp2_input',
+        '/sys/class/hwmon/hwmon1/temp0_input',
+        '/sys/class/hwmon/hwmon1/temp1_input',
+        '/sys/class/hwmon/hwmon1/temp2_input',
+      ]
+      sensorNames = [ 'cpu', 'gpu', 'what', 'ever' ]
+      i=0
+      try:
+         for s in possiblePaths:
+             p = pathlib.Path(s)
+             if p.exists():
+                print('sensor found at {}'.format(p))
+                self.sensors[sensorNames[i]] = s
+                i += 1
+      except Exception as e:
+         log.error('failed to find cpu temperature {0}'.format(e))
+      if len(self.sensors) < 1:
+         t = '/sys/class/thermal/thermal_zone{0}/temp'
+         p = pathlib.Path(t.format('0'))
+         if p.exists():
+            self.sensors[sensorNames[0]] = t.format('0')
+         p = pathlib.Path(t.format('1'))
+         if p.exists():
+            self.sensors[sensorNames[1]] = t.format('1')
+
+
+  def dump(self):
+      for d in self.hdd:
+          print(d.name)
+      for s in self.sensors:
+          print('{0} with path of {1}'.format(s, self.sensors[s]))
+
+
+  def log_temperatures(self):
+      for n in self.temps:
+          with open('/tmp/temps/{0}'.format(n), 'w') as f:
+               f.write(str(self.temps[n]).replace('.', ','))
+               f.close()
+
+
+  def hdd_temperature(self):
+      for d in self.hdd:
+          t = d.read_temperature()
+          self.temps[d.name()] = t
+
+
+  def sensor_temperature(self):
+      i = 0
+      for s in self.sensors:
+          with open(self.sensors[s]) as f:
+               t = f.read()
+          self.temps[s] = float(t) / 1000.0
+
+
+if __name__ == "__main__":
+   tl = TempLogger()
+   while True:
+         tl.hdd_temperature()
+         tl.sensor_temperature()
+         tl.log_temperatures()
+         time.sleep(1)
+
